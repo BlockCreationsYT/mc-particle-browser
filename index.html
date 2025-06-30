@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Minecraft Particle Browser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .modal-backdrop {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        }
+        .filter-btn.active {
+            background-color: #f97316; /* orange-500 */
+            color: white;
+            border-color: #f97316;
+        }
+        .controls-container {
+            opacity: 1; /* Default visible */
+            pointer-events: auto; /* Default enabled */
+            transition: opacity 0.3s ease-in-out;
+        }
+        .controls-container.hidden-opacity {
+            opacity: 0;
+            pointer-events: none; /* Disable interactions when hidden */
+        }
+    </style>
+</head>
+<body class="antialiased text-slate-700">
+
+    <div class="container mx-auto px-4 py-8">
+        
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-slate-800 mb-2">Minecraft Particle Browser</h1>
+            <p class="text-lg text-slate-600">A fast, filterable guide to all particles in Minecraft 1.21.5+ with file paths.</p>
+        </header>
+
+        <div id="controlsContainer" class="controls-container sticky top-0 z-10 bg-slate-50/80 backdrop-blur-sm py-4 mb-8 rounded-lg shadow-sm">
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="relative flex-grow">
+                    <input type="text" id="searchInput" placeholder="Search by particle name..." class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-shadow">
+                    <svg class="w-6 h-6 text-slate-400 absolute top-1/2 left-3 -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                </div>
+            </div>
+            <div id="filterContainer" class="mt-4 flex flex-wrap gap-2">
+                </div>
+        </div>
+
+        <main id="particleGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            </main>
+        
+        <div id="noResults" class="hidden text-center py-16">
+            <h2 class="text-2xl font-semibold text-slate-700">No Particles Found</h2>
+            <p class="text-slate-500 mt-2">Try adjusting your search or filter criteria.</p>
+        </div>
+
+    </div>
+
+    <div id="particleModal" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div id="modalContent" class="modal-content bg-white rounded-lg shadow-2xl w-full max-w-lg p-6 transform scale-95 opacity-0">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h2 id="modalTitle" class="text-3xl font-bold text-slate-800"></h2>
+                    <p id="modalCategory" class="text-orange-600 font-semibold"></p>
+                </div>
+                <button id="closeModalBtn" class="text-slate-400 hover:text-slate-700 transition">
+                    <svg class="w-8 h-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-1">Description:</h3>
+                    <p id="modalNotes" class="text-slate-600"></p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-1">Particle Definition File Path (Resource Pack):</h3>
+                    <pre class="bg-slate-100 p-3 rounded-lg text-slate-800 text-sm overflow-x-auto"><code id="modalFilePath"></code></pre>
+                    <p class="text-xs text-slate-500 mt-1">This is the JSON file defining the particle's behavior.</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-1">Particle Texture File Path (Resource Pack):</h3>
+                    <pre class="bg-slate-100 p-3 rounded-lg text-slate-800 text-sm overflow-x-auto"><code id="modalTexturePath"></code></pre>
+                    <p class="text-xs text-slate-500 mt-1">This is where the particle's `.png` texture is typically located. Note: Some particles use block/item textures or are procedurally generated.</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-1">Command Example:</h3>
+                    <pre class="bg-slate-100 p-3 rounded-lg text-slate-800 text-sm overflow-x-auto"><code id="modalCommand"></code></pre>
+                </div>
+                 <div>
+                    <h3 class="font-semibold text-slate-700 mb-1">Usage Notes:</h3>
+                    <p id="modalUsageNotes" class="text-slate-600 text-sm"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const particles = [
+            { category: 'General Effects', name: 'ambient_entity_effect', notes: 'Used for potion effects on entities.', filePath: 'assets/minecraft/particles/ambient_entity_effect.json', texturePath: 'assets/minecraft/textures/particle/ambient_entity_effect.png' },
+            { category: 'General Effects', name: 'angry_villager', notes: 'Appears when a villager is angry.', filePath: 'assets/minecraft/particles/angry_villager.json', texturePath: 'assets/minecraft/textures/particle/angry_villager.png' },
+            { category: 'General Effects', name: 'ash', notes: 'Ash particles from campfires or burning.', filePath: 'assets/minecraft/particles/ash.json', texturePath: 'assets/minecraft/textures/particle/ash.png' },
+            { category: 'General Effects', name: 'bubble', notes: 'Bubbles, often from water or potions.', filePath: 'assets/minecraft/particles/bubble.json', texturePath: 'assets/minecraft/textures/particle/bubble.png' },
+            { category: 'General Effects', name: 'cloud', notes: 'General cloud/smoke particle.', filePath: 'assets/minecraft/particles/cloud.json', texturePath: 'assets/minecraft/textures/particle/cloud.png' },
+            { category: 'General Effects', name: 'crit', notes: 'Critical hit particle.', filePath: 'assets/minecraft/particles/crit.json', texturePath: 'assets/minecraft/textures/particle/crit.png' },
+            { category: 'General Effects', name: 'damage_indicator', notes: 'Shows damage taken.', filePath: 'assets/minecraft/particles/damage_indicator.json', texturePath: 'assets/minecraft/textures/particle/damage_indicator.png' },
+            { category: 'General Effects', name: 'effect', notes: 'Generic effect particle.', filePath: 'assets/minecraft/particles/effect.json', texturePath: 'assets/minecraft/textures/particle/effect.png' },
+            { category: 'General Effects', name: 'electric_spark', notes: 'Sparks, e.g., from lightning.', filePath: 'assets/minecraft/particles/electric_spark.json', texturePath: 'assets/minecraft/textures/particle/electric_spark.png' },
+            { category: 'General Effects', name: 'enchant', notes: 'Enchanting table particles.', filePath: 'assets/minecraft/particles/enchant.json', texturePath: 'assets/minecraft/textures/particle/enchant.png' },
+            { category: 'General Effects', name: 'enchanted_hit', notes: 'Particle for enchanted hits.', filePath: 'assets/minecraft/particles/enchanted_hit.json', texturePath: 'assets/minecraft/textures/particle/enchanted_hit.png' },
+            { category: 'General Effects', name: 'explosion', notes: 'Small explosion particle.', filePath: 'assets/minecraft/particles/explosion.json', texturePath: 'assets/minecraft/textures/particle/explosion.png' },
+            { category: 'General Effects', name: 'explosion_emitter', notes: 'Larger, continuous explosion effect.', filePath: 'assets/minecraft/particles/explosion_emitter.json', texturePath: 'assets/minecraft/textures/particle/explosion_emitter.png' },
+            { category: 'General Effects', name: 'flash', notes: 'Quick flash particle.', filePath: 'assets/minecraft/particles/flash.json', texturePath: 'assets/minecraft/textures/particle/flash.png' },
+            { category: 'General Effects', name: 'glow', notes: 'General glowing particle.', filePath: 'assets/minecraft/particles/glow.json', texturePath: 'assets/minecraft/textures/particle/glow.png' },
+            { category: 'General Effects', name: 'happy_villager', notes: 'Appears when a villager is happy.', filePath: 'assets/minecraft/particles/happy_villager.json', texturePath: 'assets/minecraft/textures/particle/happy_villager.png' },
+            { category: 'General Effects', name: 'heart', notes: 'Heart particle, e.g., from breeding.', filePath: 'assets/minecraft/particles/heart.json', texturePath: 'assets/minecraft/textures/particle/heart.png' },
+            { category: 'General Effects', name: 'instant_effect', notes: 'Instant potion effect particle.', filePath: 'assets/minecraft/particles/instant_effect.json', texturePath: 'assets/minecraft/textures/particle/instant_effect.png' },
+            { category: 'General Effects', name: 'large_smoke', notes: 'Larger smoke particle.', filePath: 'assets/minecraft/particles/large_smoke.json', texturePath: 'assets/minecraft/textures/particle/large_smoke.png' },
+            { category: 'General Effects', name: 'light', notes: 'Light emission particle.', filePath: 'assets/minecraft/particles/light.json', texturePath: 'assets/minecraft/textures/particle/light.png' },
+            { category: 'General Effects', name: 'poof', notes: 'General disappearing/poof effect.', filePath: 'assets/minecraft/particles/poof.json', texturePath: 'assets/minecraft/textures/particle/poof.png' },
+            { category: 'General Effects', name: 'portal', notes: 'Nether portal particles.', filePath: 'assets/minecraft/particles/portal.json', texturePath: 'assets/minecraft/textures/particle/portal.png' },
+            { category: 'General Effects', name: 'reverse_portal', notes: 'A variation of portal particles.', filePath: 'assets/minecraft/particles/reverse_portal.json', texturePath: 'assets/minecraft/textures/particle/reverse_portal.png' },
+            { category: 'General Effects', name: 'smoke', notes: 'General smoke particle.', filePath: 'assets/minecraft/particles/smoke.json', texturePath: 'assets/minecraft/textures/particle/smoke.png' },
+            { category: 'General Effects', name: 'sneeze', notes: 'From pandas sneezing.', filePath: 'assets/minecraft/particles/sneeze.json', texturePath: 'assets/minecraft/textures/particle/sneeze.png' },
+            { category: 'General Effects', name: 'snowflake', notes: 'Snowflake particle.', filePath: 'assets/minecraft/particles/snowflake.json', texturePath: 'assets/minecraft/textures/particle/snowflake.png' },
+            { category: 'General Effects', name: 'sonic_boom', notes: 'Warden\'s sonic attack.', filePath: 'assets/minecraft/particles/sonic_boom.json', texturePath: 'assets/minecraft/textures/particle/sonic_boom.png' },
+            { category: 'General Effects', name: 'spit', notes: 'Llama spit.', filePath: 'assets/minecraft/particles/spit.json', texturePath: 'assets/minecraft/textures/particle/spit.png' },
+            { category: 'General Effects', name: 'splash', notes: 'Water splash.', filePath: 'assets/minecraft/particles/splash.json', texturePath: 'assets/minecraft/textures/particle/splash.png' },
+            { category: 'General Effects', name: 'totem_of_undying', notes: 'Totem activation effect.', filePath: 'assets/minecraft/particles/totem_of_undying.json', texturePath: 'assets/minecraft/textures/particle/totem_of_undying.png' },
+            { category: 'General Effects', name: 'witch', notes: 'Witch potion effect.', filePath: 'assets/minecraft/particles/witch.json', texturePath: 'assets/minecraft/textures/particle/witch.png' },
+            { category: 'General Effects', name: 'white_ash', notes: 'White ash particle.', filePath: 'assets/minecraft/particles/white_ash.json', texturePath: 'assets/minecraft/textures/particle/white_ash.png' },
+            { category: 'General Effects', name: 'white_smoke', notes: 'White smoke particle.', filePath: 'assets/minecraft/particles/white_smoke.json', texturePath: 'assets/minecraft/textures/particle/white_smoke.png' },
+            { category: 'Block/Item Based', name: 'block', notes: 'Requires block data (e.g., `stone`).', filePath: 'assets/minecraft/particles/block.json', texturePath: 'Uses the texture of the specified block.' },
+            { category: 'Block/Item Based', name: 'block_marker', notes: 'Used for debugging or marking blocks.', filePath: 'assets/minecraft/particles/block_marker.json', texturePath: 'assets/minecraft/textures/particle/block_marker.png' },
+            { category: 'Block/Item Based', name: 'falling_dust', notes: 'Dust from falling blocks (requires block data).', filePath: 'assets/minecraft/particles/falling_dust.json', texturePath: 'Uses the texture of the specified block.' },
+            { category: 'Block/Item Based', name: 'item', notes: 'Displays a small version of an item (requires item data).', filePath: 'assets/minecraft/particles/item.json', texturePath: 'Uses the texture of the specified item.' },
+            { category: 'Liquid/Drip', name: 'bubble_column_up', notes: 'Bubbles moving up in a bubble column.', filePath: 'assets/minecraft/particles/bubble_column_up.json', texturePath: 'assets/minecraft/textures/particle/bubble_column_up.png' },
+            { category: 'Liquid/Drip', name: 'bubble_pop', notes: 'Bubbles popping.', filePath: 'assets/minecraft/particles/bubble_pop.json', texturePath: 'assets/minecraft/textures/particle/bubble_pop.png' },
+            { category: 'Liquid/Drip', name: 'current_down', notes: 'Current flowing downwards.', filePath: 'assets/minecraft/particles/current_down.json', texturePath: 'assets/minecraft/textures/particle/current_down.png' },
+            { category: 'Liquid/Drip', name: 'dolphin', notes: 'Water particles from dolphins.', filePath: 'assets/minecraft/particles/dolphin.json', texturePath: 'assets/minecraft/textures/particle/dolphin.png' },
+            { category: 'Liquid/Drip', name: 'dripping_dripstone_lava', notes: 'Lava dripping from dripstone.', filePath: 'assets/minecraft/particles/dripping_dripstone_lava.json', texturePath: 'assets/minecraft/textures/particle/dripping_dripstone_lava.png' },
+            { category: 'Liquid/Drip', name: 'dripping_dripstone_water', notes: 'Water dripping from dripstone.', filePath: 'assets/minecraft/particles/dripping_dripstone_water.json', texturePath: 'assets/minecraft/textures/particle/dripping_dripstone_water.png' },
+            { category: 'Liquid/Drip', name: 'dripping_honey', notes: 'Honey dripping.', filePath: 'assets/minecraft/particles/dripping_honey.json', texturePath: 'assets/minecraft/textures/particle/dripping_honey.png' },
+            { category: 'Liquid/Drip', name: 'dripping_lava', notes: 'Lava dripping.', filePath: 'assets/minecraft/particles/dripping_lava.json', texturePath: 'assets/minecraft/textures/particle/dripping_lava.png' },
+            { category: 'Liquid/Drip', name: 'dripping_obsidian_tear', notes: 'Crying Obsidian tear.', filePath: 'assets/minecraft/particles/dripping_obsidian_tear.json', texturePath: 'assets/minecraft/textures/particle/dripping_obsidian_tear.png' },
+            { category: 'Liquid/Drip', name: 'dripping_water', notes: 'Water dripping.', filePath: 'assets/minecraft/particles/dripping_water.json', texturePath: 'assets/minecraft/textures/particle/dripping_water.png' },
+            { category: 'Liquid/Drip', name: 'falling_dripstone_lava', notes: 'Falling lava from dripstone.', filePath: 'assets/minecraft/particles/falling_dripstone_lava.json', texturePath: 'assets/minecraft/textures/particle/falling_dripstone_lava.png' },
+            { category: 'Liquid/Drip', name: 'falling_dripstone_water', notes: 'Falling water from dripstone.', filePath: 'assets/minecraft/particles/falling_dripstone_water.json', texturePath: 'assets/minecraft/textures/particle/falling_dripstone_water.png' },
+            { category: 'Liquid/Drip', name: 'falling_honey', notes: 'Falling honey.', filePath: 'assets/minecraft/particles/falling_honey.json', texturePath: 'assets/minecraft/textures/particle/falling_honey.png' },
+            { category: 'Liquid/Drip', name: 'falling_lava', notes: 'Falling lava.', filePath: 'assets/minecraft/particles/falling_lava.json', texturePath: 'assets/minecraft/textures/particle/falling_lava.png' },
+            { category: 'Liquid/Drip', name: 'falling_nectar', notes: 'Falling nectar.', filePath: 'assets/minecraft/particles/falling_nectar.json', texturePath: 'assets/minecraft/textures/particle/falling_nectar.png' },
+            { category: 'Liquid/Drip', name: 'falling_obsidian_tear', notes: 'Falling crying obsidian tear.', filePath: 'assets/minecraft/particles/falling_obsidian_tear.json', texturePath: 'assets/minecraft/textures/particle/falling_obsidian_tear.png' },
+            { category: 'Liquid/Drip', name: 'falling_spore_blossom', notes: 'Falling particles from a Spore Blossom.', filePath: 'assets/minecraft/particles/falling_spore_blossom.json', texturePath: 'assets/minecraft/textures/particle/falling_spore_blossom.png' },
+            { category: 'Liquid/Drip', name: 'falling_water', notes: 'Falling water.', filePath: 'assets/minecraft/particles/falling_water.json', texturePath: 'assets/minecraft/textures/particle/falling_water.png' },
+            { category: 'Liquid/Drip', name: 'fishing', notes: 'Fishing bobber splash.', filePath: 'assets/minecraft/particles/fishing.json', texturePath: 'assets/minecraft/textures/particle/fishing.png' },
+            { category: 'Liquid/Drip', name: 'item_slime', notes: 'Slime particle from slime blocks.', filePath: 'assets/minecraft/particles/item_slime.json', texturePath: 'assets/minecraft/textures/particle/item_slime.png' },
+            { category: 'Liquid/Drip', name: 'item_snowball', notes: 'Snowball hit particle.', filePath: 'assets/minecraft/particles/item_snowball.json', texturePath: 'assets/minecraft/textures/particle/item_snowball.png' },
+            { category: 'Liquid/Drip', name: 'landing_honey', notes: 'Honey landing.', filePath: 'assets/minecraft/particles/landing_honey.json', texturePath: 'assets/minecraft/textures/particle/landing_honey.png' },
+            { category: 'Liquid/Drip', name: 'landing_lava', notes: 'Lava landing.', filePath: 'assets/minecraft/particles/landing_lava.json', texturePath: 'assets/minecraft/textures/particle/landing_lava.png' },
+            { category: 'Liquid/Drip', name: 'landing_obsidian_tear', notes: 'Crying obsidian tear landing.', filePath: 'assets/minecraft/particles/landing_obsidian_tear.json', texturePath: 'assets/minecraft/textures/particle/landing_obsidian_tear.png' },
+            { category: 'Liquid/Drip', name: 'lava', notes: 'Lava particles.', filePath: 'assets/minecraft/particles/lava.json', texturePath: 'assets/minecraft/textures/particle/lava.png' },
+            { category: 'Liquid/Drip', name: 'squid_ink', notes: 'Squid ink.', filePath: 'assets/minecraft/particles/squid_ink.json', texturePath: 'assets/minecraft/textures/particle/squid_ink.png' },
+            { category: 'Liquid/Drip', name: 'underwater', notes: 'Underwater bubbles/effects.', filePath: 'assets/minecraft/particles/underwater.json', texturePath: 'assets/minecraft/textures/particle/underwater.png' },
+            { category: 'Colored/Dust', name: 'dust', notes: 'Colored dust (requires color and scale).', filePath: 'assets/minecraft/particles/dust.json', texturePath: 'Procedurally generated/colored; no direct PNG.' },
+            { category: 'Colored/Dust', name: 'dust_color_transition', notes: 'Dust changing color (requires start, end color, and scale).', filePath: 'assets/minecraft/particles/dust_color_transition.json', texturePath: 'Procedurally generated/colored; no direct PNG.' },
+            { category: 'Colored/Dust', name: 'redstone', notes: 'Redstone dust particles.', filePath: 'assets/minecraft/particles/redstone.json', texturePath: 'Procedurally generated/colored; no direct PNG.' }, 
+            { category: 'Mob/Entity Specific', name: 'dragon_breath', notes: 'Dragon\'s breath.', filePath: 'assets/minecraft/particles/dragon_breath.json', texturePath: 'assets/minecraft/textures/particle/dragon_breath.png' },
+            { category: 'Mob/Entity Specific', name: 'elder_guardian', notes: 'Elder Guardian\'s effect.', filePath: 'assets/minecraft/particles/elder_guardian.json', texturePath: 'assets/minecraft/textures/particle/elder_guardian.png' },
+            { category: 'Mob/Entity Specific', name: 'entity_effect', notes: 'Generic entity effect.', filePath: 'assets/minecraft/particles/entity_effect.json', texturePath: 'assets/minecraft/textures/particle/entity_effect.png' },
+            { category: 'Mob/Entity Specific', name: 'egg_crack', notes: 'Particle when an egg cracks.', filePath: 'assets/minecraft/particles/egg_crack.json', texturePath: 'assets/minecraft/textures/particle/egg_crack.png' },
+            { category: 'Mob/Entity Specific', name: 'firefly', notes: 'Firefly particle (often from Firefly Bushes, for decoration).', filePath: 'assets/minecraft/particles/firefly.json', texturePath: 'assets/minecraft/textures/particle/firefly.png' }, 
+            { category: 'Mob/Entity Specific', name: 'glow_squid_ink', notes: 'Glow Squid ink.', filePath: 'assets/minecraft/particles/glow_squid_ink.json', texturePath: 'assets/minecraft/textures/particle/glow_squid_ink.png' },
+            { category: 'Mob/Entity Specific', name: 'infested', notes: 'From Infested effect.', filePath: 'assets/minecraft/particles/infested.json', texturePath: 'assets/minecraft/textures/particle/infested.png' },
+            { category: 'Mob/Entity Specific', name: 'oozing', notes: 'From Oozing effect (e.g., from Slime Blocks).', filePath: 'assets/minecraft/particles/oozing.json', texturePath: 'assets/minecraft/textures/particle/oozing.png' },
+            { category: 'Mob/Entity Specific', name: 'oozing_ambient', notes: 'Ambient version of oozing particle.', filePath: 'assets/minecraft/particles/oozing_ambient.json', texturePath: 'assets/minecraft/textures/particle/oozing_ambient.png' },
+            { category: 'Mob/Entity Specific', name: 'raid_omen', notes: 'Raid Omen effect particles.', filePath: 'assets/minecraft/particles/raid_omen.json', texturePath: 'assets/minecraft/textures/particle/raid_omen.png' },
+            { category: 'Mob/Entity Specific', name: 'raid_omen_ambient', notes: 'Ambient version of raid omen particles.', filePath: 'assets/minecraft/particles/raid_omen_ambient.json', texturePath: 'assets/minecraft/textures/particle/raid_omen_ambient.png' },
+            { category: 'Mob/Entity Specific', name: 'shriek', notes: 'Warden\'s shriek.', filePath: 'assets/minecraft/particles/shriek.json', texturePath: 'assets/minecraft/textures/particle/shriek.png' },
+            { category: 'Mob/Entity Specific', name: 'sneeze', notes: 'From pandas sneezing.', filePath: 'assets/minecraft/particles/sneeze.json', texturePath: 'assets/minecraft/textures/particle/sneeze.png' },
+            { category: 'Mob/Entity Specific', name: 'soul', notes: 'Soul particles (from Soul Sand/Soil).', filePath: 'assets/minecraft/particles/soul.json', texturePath: 'assets/minecraft/textures/particle/soul.png' },
+            { category: 'Mob/Entity Specific', name: 'soul_fire_flame', notes: 'Blue flame from soul fire.', filePath: 'assets/minecraft/particles/soul_fire_flame.json', texturePath: 'assets/minecraft/textures/particle/soul_fire_flame.png' },
+            { category: 'Mob/Entity Specific', name: 'small_soul_fire_flame', notes: 'Smaller blue flame.', filePath: 'assets/minecraft/particles/small_soul_fire_flame.json', texturePath: 'assets/minecraft/textures/particle/small_soul_fire_flame.png' },
+            { category: 'Mob/Entity Specific', name: 'sweep_attack', notes: 'Sword sweep attack.', filePath: 'assets/minecraft/particles/sweep_attack.json', texturePath: 'assets/minecraft/textures/particle/sweep_attack.png' },
+            { category: 'Mob/Entity Specific', name: 'trial_omen', notes: 'Trial Omen effect particles.', filePath: 'assets/minecraft/particles/trial_omen.json', texturePath: 'assets/minecraft/textures/particle/trial_omen.png' },
+            { category: 'Mob/Entity Specific', name: 'trial_omen_ambient', notes: 'Ambient version of trial omen particles.', filePath: 'assets/minecraft/particles/trial_omen_ambient.json', texturePath: 'assets/minecraft/textures/particle/trial_omen_ambient.png' },
+            { category: 'Mob/Entity Specific', name: 'trial_omen_single', notes: 'Single trial omen particle.', filePath: 'assets/minecraft/particles/trial_omen_single.json', texturePath: 'assets/minecraft/textures/particle/trial_omen_single.png' },
+            { category: 'Mob/Entity Specific', name: 'vibration', notes: 'Sculk vibrations.', filePath: 'assets/minecraft/particles/vibration.json', texturePath: 'assets/minecraft/textures/particle/vibration.png' },
+            { category: 'Mob/Entity Specific', name: 'wax_off', notes: 'Wax removal from copper.', filePath: 'assets/minecraft/particles/wax_off.json', texturePath: 'assets/minecraft/textures/particle/wax_off.png' },
+            { category: 'Mob/Entity Specific', name: 'wax_on', notes: 'Wax application to copper.', filePath: 'assets/minecraft/particles/wax_on.json', texturePath: 'assets/minecraft/textures/particle/wax_on.png' },
+            { category: 'Mob/Entity Specific', name: 'weaving', notes: 'From Weaving effect (e.g., from cobweb breaking).', filePath: 'assets/minecraft/particles/weaving.json', texturePath: 'assets/minecraft/textures/particle/weaving.png' },
+            { category: 'Mob/Entity Specific', name: 'weaving_ambient', notes: 'Ambient version of weaving particle.', filePath: 'assets/minecraft/particles/weaving_ambient.json', texturePath: 'assets/minecraft/textures/particle/weaving_ambient.png' },
+            { category: 'Mob/Entity Specific', name: 'wind', notes: 'Wind particles.', filePath: 'assets/minecraft/particles/wind.json', texturePath: 'assets/minecraft/textures/particle/wind.png' },
+            { category: 'Mob/Entity Specific', name: 'wind_ambient', notes: 'Ambient wind particles.', filePath: 'assets/minecraft/particles/wind_ambient.json', texturePath: 'assets/minecraft/textures/particle/wind_ambient.png' },
+            { category: 'Mob/Entity Specific', name: 'wind_burst', notes: 'Wind burst effect.', filePath: 'assets/minecraft/particles/wind_burst.json', texturePath: 'assets/minecraft/textures/particle/wind_burst.png' },
+            { category: 'Mob/Entity Specific', name: 'wind_charged_ambient', notes: 'Ambient wind charged effect.', filePath: 'assets/minecraft/particles/wind_charged_ambient.json', texturePath: 'assets/minecraft/textures/particle/wind_charged_ambient.png' },
+            { category: 'Mob/Entity Specific', name: 'wind_charged_emitter', notes: 'Wind charged emitter.', filePath: 'assets/minecraft/particles/wind_charged_emitter.json', texturePath: 'assets/minecraft/textures/particle/wind_charged_emitter.png' },
+            { category: 'Mob/Entity Specific', name: 'wind_explosion_emitter', notes: 'Wind explosion emitter.', filePath: 'assets/minecraft/particles/wind_explosion_emitter.json', texturePath: 'assets/minecraft/textures/particle/wind_explosion_emitter.png' },
+            { category: 'Sculk/Deep Dark', name: 'sculk_charge', notes: 'Sculk charge-up.', filePath: 'assets/minecraft/particles/sculk_charge.json', texturePath: 'assets/minecraft/textures/particle/sculk_charge.png' },
+            { category: 'Sculk/Deep Dark', name: 'sculk_charge_pop', notes: 'Sculk charge pop.', filePath: 'assets/minecraft/particles/sculk_charge_pop.json', texturePath: 'assets/minecraft/textures/particle/sculk_charge_pop.png' },
+            { category: 'Sculk/Deep Dark', name: 'sculk_soul', notes: 'Sculk soul particles.', filePath: 'assets/minecraft/particles/sculk_soul.json', texturePath: 'assets/minecraft/textures/particle/sculk_soul.png' },
+            { category: 'Sculk/Deep Dark', name: 'trial_spawner_detection', notes: 'Trial Spawner detection.', filePath: 'assets/minecraft/particles/trial_spawner_detection.json', texturePath: 'assets/minecraft/textures/particle/trial_spawner_detection.png' },
+            { category: 'Sculk/Deep Dark', name: 'trial_spawner_detection_ominous', notes: 'Ominous Trial Spawner detection.', filePath: 'assets/minecraft/particles/trial_spawner_detection_ominous.json', texturePath: 'assets/minecraft/textures/particle/trial_spawner_detection_ominous.png' },
+            { category: 'Misc./Specific', name: 'campfire_cosy_smoke', notes: 'Smoke from a cosy campfire.', filePath: 'assets/minecraft/particles/campfire_cosy_smoke.json', texturePath: 'assets/minecraft/textures/particle/campfire_cosy_smoke.png' },
+            { category: 'Misc./Specific', name: 'campfire_signal_smoke', notes: 'Smoke from a signalling campfire.', filePath: 'assets/minecraft/particles/campfire_signal_smoke.json', texturePath: 'assets/minecraft/textures/particle/campfire_signal_smoke.png' },
+            { category: 'Misc./Specific', name: 'cherry_leaves', notes: 'Particles from cherry leaves.', filePath: 'assets/minecraft/particles/cherry_leaves.json', texturePath: 'assets/minecraft/textures/particle/cherry_leaves.png' },
+            { category: 'Misc./Specific', name: 'composter', notes: 'Composter particles.', filePath: 'assets/minecraft/particles/composter.json', texturePath: 'assets/minecraft/textures/particle/composter.png' },
+            { category: 'Misc./Specific', name: 'crimson_spore', notes: 'Crimson forest spores.', filePath: 'assets/minecraft/particles/crimson_spore.json', texturePath: 'assets/minecraft/textures/particle/crimson_spore.png' },
+            { category: 'Misc./Specific', name: 'end_rod', notes: 'End Rod particles.', filePath: 'assets/minecraft/particles/end_rod.json', texturePath: 'assets/minecraft/textures/particle/end_rod.png' },
+            { category: 'Misc./Specific', name: 'mycelium', notes: 'Mycelium particles.', filePath: 'assets/minecraft/particles/mycelium.json', texturePath: 'assets/minecraft/textures/particle/mycelium.png' },
+            { category: 'Misc./Specific', name: 'note', notes: 'Note block particles (can be colored).', filePath: 'assets/minecraft/particles/note.json', texturePath: 'assets/minecraft/textures/particle/note.png' },
+            { category: 'Misc./Specific', name: 'ominous_spawning', notes: 'Ominous spawning particles.', filePath: 'assets/minecraft/particles/ominous_spawning.json', texturePath: 'assets/minecraft/textures/particle/ominous_spawning.png' },
+            { category: 'Misc./Specific', name: 'pale_oak_leaves', notes: 'Particles from pale oak leaves.', filePath: 'assets/minecraft/particles/pale_oak_leaves.json', texturePath: 'assets/minecraft/textures/particle/pale_oak_leaves.png' },
+            { category: 'Misc./Specific', name: 'scrape', notes: 'Scrape sound/visual effect.', filePath: 'assets/minecraft/particles/scrape.json', texturePath: 'assets/minecraft/textures/particle/scrape.png' },
+            { category: 'Misc./Specific', name: 'spore_blossom_air', notes: 'Spore Blossom ambient particles.', filePath: 'assets/minecraft/particles/spore_blossom_air.json', texturePath: 'assets/minecraft/textures/particle/spore_blossom_air.png' },
+            { category: 'Misc./Specific', name: 'tinted_leaves', notes: 'Particles from tinted leaves.', filePath: 'assets/minecraft/particles/tinted_leaves.json', texturePath: 'assets/minecraft/textures/particle/tinted_leaves.png' },
+            { category: 'Misc./Specific', name: 'vault_connection', notes: 'Vault connection particles.', filePath: 'assets/minecraft/particles/vault_connection.json', texturePath: 'assets/minecraft/textures/particle/vault_connection.png' },
+            { category: 'Misc./Specific', name: 'warped_spore', notes: 'Warped forest spores.', filePath: 'assets/minecraft/particles/warped_spore.json', texturePath: 'assets/minecraft/textures/particle/warped_spore.png' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const particleGrid = document.getElementById('particleGrid');
+            const searchInput = document.getElementById('searchInput');
+            const filterContainer = document.getElementById('filterContainer');
+            const noResultsDiv = document.getElementById('noResults');
+            const controlsContainer = document.getElementById('controlsContainer'); // Get reference to controls container
+
+            const modal = document.getElementById('particleModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalCategory = document.getElementById('modalCategory');
+            const modalNotes = document.getElementById('modalNotes');
+            const modalFilePath = document.getElementById('modalFilePath'); // For .json file path
+            const modalTexturePath = document.getElementById('modalTexturePath'); // For .png texture path
+            const modalCommand = document.getElementById('modalCommand');
+            const modalUsageNotes = document.getElementById('modalUsageNotes');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const modalContent = document.getElementById('modalContent');
+            
+            let activeCategory = 'All';
+
+            // Generate filter buttons
+            const categories = ['All', ...new Set(particles.map(p => p.category))];
+            filterContainer.innerHTML = categories.map(category => 
+                `<button class="filter-btn px-4 py-2 text-sm font-medium border rounded-full transition ${category === 'All' ? 'active' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}" data-category="${category}">${category.replace(/_/g, ' ')}</button>`
+            ).join('');
+
+            // Function to render particles
+            function renderParticles(particleArray) {
+                particleGrid.innerHTML = '';
+                if (particleArray.length === 0) {
+                    noResultsDiv.classList.remove('hidden');
+                    return;
+                }
+                noResultsDiv.classList.add('hidden');
+
+                particleArray.forEach(particle => {
+                    const card = document.createElement('div');
+                    card.className = 'card bg-white p-4 rounded-lg shadow-md cursor-pointer flex flex-col justify-between';
+                    card.innerHTML = `
+                        <div>
+                            <h3 class="font-bold text-slate-800 break-words">${particle.name.replace(/_/g, ' ')}</h3>
+                            <p class="text-xs text-orange-600 font-semibold uppercase mt-1">${particle.category}</p>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => openModal(particle));
+                    particleGrid.appendChild(card);
+                });
+            }
+
+            // Function to handle filtering
+            function filterParticles() {
+                const searchTerm = searchInput.value.toLowerCase().replace(/ /g, '_');
+                
+                let filtered = particles;
+
+                if (activeCategory !== 'All') {
+                    filtered = filtered.filter(p => p.category === activeCategory);
+                }
+
+                if (searchTerm) {
+                    filtered = filtered.filter(p => p.name.toLowerCase().includes(searchTerm));
+                }
+                
+                renderParticles(filtered);
+            }
+            
+            // Event listeners for filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelector('.filter-btn.active').classList.remove('active');
+                    btn.classList.add('active');
+                    activeCategory = btn.dataset.category;
+                    filterParticles();
+                });
+            });
+
+            // Function to open modal
+            function openModal(particle) {
+                modalTitle.textContent = particle.name.replace(/_/g, ' ');
+                modalCategory.textContent = particle.category;
+                modalNotes.textContent = particle.notes;
+                modalFilePath.textContent = particle.filePath;
+                modalTexturePath.textContent = particle.texturePath; // Set the texture path
+
+                let commandText = `/particle minecraft:${particle.name} ~ ~1 ~`;
+                let usageNotesText = 'This is a basic command to spawn the particle at your location. More parameters (like quantity, speed, offsets, or specific data) may be needed depending on the particle type.';
+
+                if (particle.name === 'block' || particle.name === 'falling_dust') {
+                    commandText = `/particle minecraft:${particle.name}{block_state:{Name:"minecraft:stone"}} ~ ~1 ~`;
+                    usageNotesText = `This particle requires a block ID and can optionally include block states, e.g., 'minecraft:stone[facing=north]'. Its texture is derived from the specified block.`;
+                } else if (particle.name === 'item') {
+                    commandText = `/particle minecraft:${particle.name} minecraft:apple ~ ~1 ~`;
+                    usageNotesText = `This particle requires an item ID. Example uses 'minecraft:apple'. Its texture is derived from the item.`;
+                } else if (particle.name === 'dust') { // Specific update for dust
+                     commandText = `/particle minecraft:${particle.name}{color:[1.0,0.0,0.0],scale:1.0} ~ ~1 ~`; // R G B scale
+                     usageNotesText = `This particle requires color (Red Green Blue, 0.0-1.0) and scale values. It is procedurally generated, not from a direct PNG texture.`;
+                } else if (particle.name === 'dust_color_transition') { // Specific update for dust_color_transition
+                    commandText = `/particle minecraft:${particle.name}{from_color:[1.0,0.0,0.0],to_color:[1.0,0.0,0.92],scale:1.0} ~ ~1 ~`; // R1 G1 B1 R2 G2 B2 scale
+                    usageNotesText = `This particle requires two colors (start R G B, end R G B) and a scale value. It is procedurally generated, not from a direct PNG texture.`;
+                } else if (particle.name === 'note') {
+                    commandText = `/particle minecraft:note 1.0 0.0 0.0 0.0 ~ ~1 ~`; // Note can be colored (note_color, 0-24)
+                    usageNotesText = `The 'note' particle can be colored. The fourth parameter is note color (0-24, corresponding to notes on a piano). It is procedurally generated, not from a direct PNG texture.`;
+                } else if (particle.name === 'sculk_charge' || particle.name === 'sculk_charge_pop') {
+                    commandText = `/particle minecraft:${particle.name} 1.0 ~ ~1 ~`;
+                    usageNotesText = `These particles can take an additional 'roll' parameter (0.0-1.0) for rotation.`;
+                }
+
+                
+                modalCommand.textContent = commandText;
+                modalUsageNotes.textContent = usageNotesText;
+
+                modal.classList.remove('hidden');
+                controlsContainer.classList.add('hidden-opacity'); // Hide controls
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modalContent.classList.remove('scale-95', 'opacity-0');
+                }, 10);
+            }
+
+            // Function to close modal
+            function closeModal() {
+                 modalContent.classList.add('scale-95', 'opacity-0');
+                 modal.classList.add('opacity-0');
+                 controlsContainer.classList.remove('hidden-opacity'); // Show controls
+                 setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            }
+
+            // Event listeners
+            searchInput.addEventListener('input', filterParticles);
+            closeModalBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+
+            // Initial render
+            renderParticles(particles);
+        });
+    </script>
+</body>
+</html>
